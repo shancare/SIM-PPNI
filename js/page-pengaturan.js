@@ -5,8 +5,9 @@ const PG = { users: null, logs: null };
 function userDialog(u) {
   u = u || null;
   const d = openDialog({
-    title: u ? 'Ubah Pengguna' : 'Tambah Pengguna', sub: 'Pengguna masuk memakai akun Google dengan email di bawah ini.',
-    body: '<div class="field"><label for="u-em">Email Google *</label><input class="input" id="u-em" name="email" type="email" inputmode="email" autocomplete="off" value="' + esc(u ? u.email : '') + '"' + (u ? ' readonly' : '') + ' placeholder="nama@gmail.com"></div>' +
+    title: u ? 'Ubah Pengguna' : 'Tambah Pengguna', sub: u ? 'Kosongkan sandi bila tidak ingin mengubahnya.' : 'Berikan username dan sandi awal kepada pengurus.',
+    body: '<div class="field"><label for="u-em">Username *</label><input class="input" id="u-em" name="username" autocomplete="off" autocapitalize="none" value="' + esc(u ? u.email : '') + '"' + (u ? ' readonly' : '') + ' placeholder="mis. bendahara"><div class="hint">Huruf kecil, angka, titik, strip atau garis bawah (3-60 karakter).</div></div>' +
+      '<div class="field"><label for="u-pw">' + (u ? 'Sandi baru (opsional)' : 'Sandi awal *') + '</label><input class="input" id="u-pw" name="password" type="text" autocomplete="off" placeholder="minimal 8 karakter"><div class="hint">Disimpan terenkripsi (hash); tidak dapat dilihat kembali.</div></div>' +
       '<div class="field"><label for="u-nm">Nama *</label><input class="input" id="u-nm" name="nama" maxlength="80" value="' + esc(u ? u.nama : '') + '"></div>' +
       '<div class="grid g2" style="gap:12px"><div class="field"><label for="u-pr">Peran</label><select class="input" id="u-pr" name="peran"><option>Pengurus</option><option' + (u && u.peran === 'Admin' ? ' selected' : '') + '>Admin</option></select></div>' +
       '<div class="field"><label for="u-st">Status</label><select class="input" id="u-st" name="status"><option>Aktif</option><option' + (u && u.status === 'Nonaktif' ? ' selected' : '') + '>Nonaktif</option></select></div></div>' +
@@ -15,7 +16,9 @@ function userDialog(u) {
     actions: {
       save: async (e, c) => {
         const v = formVals(c.body);
-        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email || '')) return fieldErr($('#u-em', c.el), 'Email tidak valid.');
+        v.username = (v.username || '').trim().toLowerCase();
+        if (!/^[a-z0-9._@-]{3,60}$/.test(v.username)) return fieldErr($('#u-em', c.el), 'Username 3-60 karakter: huruf kecil, angka, . - _');
+        if ((!u && !v.password) || (v.password && v.password.length < 8)) return fieldErr($('#u-pw', c.el), 'Sandi minimal 8 karakter.');
         if (!(v.nama || '').trim()) return fieldErr($('#u-nm', c.el), 'Nama wajib diisi.');
         const r = await api('userSave', v); if (!r.success) return toast(r.message, 'error');
         toast('Pengguna disimpan.'); c.close(); PG.users = null; Store.del(userKey('users')); Pages.pengaturan.show($('.page[data-page="pengaturan"]'), null, { force: true });

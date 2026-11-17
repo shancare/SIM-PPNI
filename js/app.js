@@ -10,43 +10,35 @@ function loadBoot(boot) {
   Store.set(userKey('boot'), { t: Date.now(), data: boot });
 }
 
-/* ---------- Login ---------- */
+/* ---------- Login (username + sandi) ---------- */
 function showLogin(msg) {
   AppState.token = ''; AppState.user = null;
-  appEl().innerHTML = '<div class="login"><div class="login-card">' +
+  appEl().innerHTML = '<div class="login"><form class="login-card" id="login-form" novalidate>' +
     '<div class="brand-mark">' + LOGO_SVG_WHITE + '</div>' +
     '<h1 class="h-md" style="font-size:22px">SIM-IURAN PPNI</h1>' +
     '<p class="muted mt8">DPK PPNI RSUD Prof. Dr. Soekandar<br>Sistem Informasi Iuran Anggota</p>' +
-    '<div class="gbtn" id="gbtn"><div class="skel" style="width:260px;height:44px"></div></div>' +
+    '<div class="field mt16" style="text-align:left"><label for="lg-user">Username</label><input class="input" id="lg-user" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required></div>' +
+    '<div class="field" style="text-align:left"><label for="lg-pass">Sandi</label><div class="pw-wrap"><input class="input" id="lg-pass" name="password" type="password" autocomplete="current-password" required><button type="button" class="btn ghost icon pw-eye" id="lg-eye" aria-label="Tampilkan sandi">' + ic('eye', 'ic-sm') + '</button></div></div>' +
+    '<button class="btn dark block" id="lg-btn" type="submit">Masuk</button>' +
     '<div id="login-msg" role="alert" class="' + (msg ? 'banner-warn' : '') + '" style="text-align:left;margin-top:12px;font-size:13px">' + esc(msg || '') + '</div>' +
-    '<p class="small muted mt16">Hanya akun Google yang terdaftar sebagai pengurus yang dapat masuk.</p></div></div>';
-  if (!CFG.GOOGLE_CLIENT_ID || /GANTI/.test(CFG.GOOGLE_CLIENT_ID)) {
-    $('#gbtn').innerHTML = '';
+    '<p class="small muted mt16">Hanya pengurus yang terdaftar yang dapat masuk. Lupa sandi? Hubungi Admin/Ketua.</p></form></div>';
+  if (!CFG.GAS_URL || /GANTI/.test(CFG.GAS_URL)) {
     $('#login-msg').className = 'banner-amber';
-    $('#login-msg').innerHTML = '<b>Konfigurasi belum lengkap.</b> Isi <code>GOOGLE_CLIENT_ID</code> dan <code>GAS_URL</code> di file <code>js/config.js</code>.';
-    return;
+    $('#login-msg').innerHTML = '<b>Konfigurasi belum lengkap.</b> Isi <code>GAS_URL</code> di file <code>js/config.js</code>.';
   }
-  const mount = () => {
-    if (!window.google || !google.accounts) return false;
-    google.accounts.id.initialize({ client_id: CFG.GOOGLE_CLIENT_ID, callback: onCredential, auto_select: false, cancel_on_tap_outside: true });
-    $('#gbtn').innerHTML = '';
-    google.accounts.id.renderButton($('#gbtn'), { theme: 'filled_blue', size: 'large', text: 'signin_with', shape: 'pill', locale: 'id', width: 280 });
-    return true;
-  };
-  if (!mount()) {
-    if (!document.getElementById('gsi')) {
-      const s = document.createElement('script'); s.id = 'gsi'; s.src = 'https://accounts.google.com/gsi/client'; s.async = true; s.defer = true; document.head.appendChild(s);
-    }
-    let n = 0; const t = setInterval(() => { if (mount() || ++n > 50) { clearInterval(t); if (n > 50) { $('#gbtn').innerHTML = '<p class="muted small">Tidak dapat memuat Google Sign-In. Periksa koneksi internet Anda.</p>'; } } }, 200);
-  }
+  $('#lg-eye').onclick = () => { const i = $('#lg-pass'); i.type = i.type === 'password' ? 'text' : 'password'; };
+  $('#login-form').addEventListener('submit', onLoginSubmit);
+  $('#lg-user').focus();
   warmUpServer();
 }
 
-async function onCredential(resp) {
-  const box = $('#login-msg');
-  if (box) { box.className = 'banner-info'; box.textContent = 'Memeriksa akun…'; }
-  const res = await api('login', { idToken: resp.credential });
-  if (!res.success) { if (box) { box.className = 'banner-warn'; box.textContent = res.message; } return; }
+async function onLoginSubmit(e) {
+  e.preventDefault();
+  const box = $('#login-msg'), btn = $('#lg-btn'), username = $('#lg-user').value.trim(), password = $('#lg-pass').value;
+  if (!username || !password) { box.className = 'banner-warn'; box.textContent = 'Isi username dan sandi.'; return; }
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Memeriksa…'; box.className = ''; box.textContent = '';
+  const res = await api('login', { username, password });
+  if (!res.success) { btn.disabled = false; btn.textContent = 'Masuk'; box.className = 'banner-warn'; box.textContent = res.message; $('#lg-pass').select(); return; }
   AppState.token = res.data.token; AppState.user = res.data.user;
   Store.set('session', { token: res.data.token, user: res.data.user });
   loadBoot(res.data.boot);
@@ -54,7 +46,6 @@ async function onCredential(resp) {
 }
 
 function logout(msg) {
-  try { if (window.google && google.accounts) google.accounts.id.disableAutoSelect(); } catch (e) { /* abaikan */ }
   Store.clearUser();
   showLogin(msg);
 }
@@ -90,13 +81,39 @@ function userMenu() {
   const d = openDialog({
     title: u.nama || u.email, sub: esc(u.email) + ' · <b>' + esc(u.peran) + '</b>', noFocus: true,
     body: '<div class="stack">' + (isAdmin() ? '<button class="btn soft block" data-act="set">' + ic('sliders') + 'Pengaturan, pengguna & log</button>' : '') +
+      '<button class="btn soft block" data-act="pw">' + ic('shield') + 'Ganti sandi</button>' +
       '<button class="btn soft block" data-act="seg">' + ic('refresh') + 'Segarkan semua data</button>' +
       '<button class="btn danger block" data-act="out">' + ic('logout') + 'Keluar</button>' +
       '<p class="small muted" style="text-align:center">Versi aplikasi 1.0</p></div>',
     actions: {
       set: () => { d.close(); go('pengaturan'); },
       seg: async () => { invalidateCache(); const r = await api('bootstrap'); if (r.success) { loadBoot(r.data); } d.close(); route(); $$('#view .page').forEach((p) => { const nm = p.dataset.page; if (!p.hidden && Pages[nm].show) Pages[nm].show(p, null, { force: true }); }); toast('Data disegarkan.'); },
+      pw: () => { d.close(); passwordDialog(); },
       out: () => { d.close(); logout(); }
+    }
+  });
+}
+
+function passwordDialog() {
+  const d = openDialog({
+    title: 'Ganti Sandi', sub: 'Setelah diganti, Anda perlu masuk kembali di semua perangkat.',
+    body: '<div class="field"><label for="pw-old">Sandi saat ini</label><input class="input" id="pw-old" name="lama" type="password" autocomplete="current-password"></div>' +
+      '<div class="field"><label for="pw-new">Sandi baru (min. 8 karakter)</label><input class="input" id="pw-new" name="baru" type="password" autocomplete="new-password"></div>' +
+      '<div class="field"><label for="pw-new2">Ulangi sandi baru</label><input class="input" id="pw-new2" type="password" autocomplete="new-password"></div>',
+    footer: '<button class="btn soft" data-act="close">Batal</button><button class="btn dark" data-act="save">Simpan</button>', footRow: true,
+    actions: {
+      save: async (e, c) => {
+        const v = formVals(c.body);
+        if (!v.lama) return fieldErr($('#pw-old', c.el), 'Isi sandi saat ini.');
+        if ((v.baru || '').length < 8) return fieldErr($('#pw-new', c.el), 'Minimal 8 karakter.');
+        if (v.baru !== $('#pw-new2', c.el).value) return fieldErr($('#pw-new2', c.el), 'Pengulangan tidak sama.');
+        const r = await api('gantiSandi', { lama: v.lama, baru: v.baru });
+        if (!r.success) return toast(r.message, 'error');
+        c.close();
+        const lg = await api('login', { username: AppState.user.email, password: v.baru });
+        if (lg.success) { AppState.token = lg.data.token; Store.set('session', { token: lg.data.token, user: lg.data.user }); loadBoot(lg.data.boot); toast('Sandi diganti.'); }
+        else logout('Sandi diganti. Silakan masuk kembali.');
+      }
     }
   });
 }

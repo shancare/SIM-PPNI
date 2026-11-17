@@ -314,3 +314,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
 .print-head { display: none; font-size: 13px; line-height: 20px; }
 .split > * { min-width: 0; }
+.pw-wrap { position: relative; }
+.pw-wrap .input { padding-right: 52px; }
+.pw-eye { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); }
+.login-card .field label { display: block; margin-bottom: 6px; }
