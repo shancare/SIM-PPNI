@@ -112,8 +112,14 @@ function memberDialog(r) {
       '<div class="field"><label for="f-wa">No. WhatsApp</label><input class="input" id="f-wa" name="wa" value="' + esc(r.wa || '') + '" inputmode="tel" placeholder="08xxxxxxxxxx"><div class="hint">Format otomatis dijadikan 62xxxxxxxx.</div></div>' +
       '<div class="grid g2" style="gap:12px"><div class="field"><label for="f-st">Status</label><select class="input" id="f-st" name="status">' + ['Aktif', 'Nonaktif', 'Purna', 'Berhenti'].map((s) => '<option' + (r.status === s ? ' selected' : '') + '>' + s + '</option>').join('') + '</select></div><div class="field"><label for="f-tgl">Tanggal bergabung</label><input class="input" type="date" id="f-tgl" name="tglBergabung" value="' + esc(r.tglBergabung || '') + '"></div></div>' +
       '<div class="field"><label for="f-cat">Catatan</label><input class="input" id="f-cat" name="catatan" value="' + esc(r.catatan || '') + '" maxlength="250"></div>',
-    footer: '<button class="btn soft" data-act="close">Batal</button><button class="btn dark" data-act="save">' + ic('check') + 'Simpan</button>', footRow: true,
+    footer: (r.id ? '<button class="btn danger" data-act="del">Hapus</button>' : '') + '<button class="btn soft" data-act="close">Batal</button><button class="btn dark" data-act="save">' + ic('check') + 'Simpan</button>', footRow: true,
     actions: {
+      del: async () => {
+        if (!confirm('Hapus anggota "' + r.nama + '" secara permanen?\nHanya bisa bila belum ada riwayat iuran/tabungan.')) return;
+        const res = await api('anggotaDelete', { id: r.id });
+        if (!res.success) return toast(res.message, 'error');
+        d.close(); toast(res.message); dataChanged(['dashboard', 'iuran']); AG.list = null; AG.tabData = null; refreshPage('anggota');
+      },
       save: async () => {
         const v = formVals(d.dlg);
         if (!v.nama) return fieldErr($('#f-nama', d.el), 'Nama wajib diisi.');
