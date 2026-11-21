@@ -127,8 +127,8 @@ function memberDialog(r) {
 
 function importAnggotaDialog() {
   const d = openDialog({
-    title: 'Impor Daftar Anggota', wide: true, sub: 'Tempel dari Excel atau unggah CSV. Kolom: <b>Nama ; NIRA ; NIP ; Unit ; No WA</b>. Baris pertama berisi judul akan dilewati otomatis.',
-    body: '<div class="field"><label for="a-file">Berkas CSV (opsional)</label><input class="input" type="file" id="a-file" accept=".csv,.txt,text/csv,text/plain" style="padding-top:10px"></div>' +
+    title: 'Impor Daftar Anggota', wide: true, sub: 'Unggah berkas <b>Excel (.xlsx)</b> atau CSV, atau tempel langsung dari Excel. Kolom berurutan: <b>Nama, NIRA, NIP, Unit, No WA</b>. Baris judul dilewati otomatis.',
+    body: '<div class="field"><label for="a-file">Berkas Excel / CSV (opsional)</label><input class="input" type="file" id="a-file" accept=".xlsx,.csv,.txt,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="padding-top:10px"><div class="hint">Tips Excel: format kolom NIRA, NIP, dan No WA sebagai <b>Teks</b> agar angka nol di depan dan 18 digit NIP tidak berubah. <a href="#" id="a-tpl">Unduh contoh format</a></div></div>' +
       '<div class="field"><label for="a-txt">Data anggota (satu baris per anggota)</label><textarea class="input" id="a-txt" rows="9" placeholder="Ns. Dewi Sartika, S.Kep;3516008721;198804122012012003;ICU;081234567890"></textarea><div class="hint" id="a-cnt">0 baris terbaca</div></div>',
     footer: '<button class="btn soft" data-act="close">Batal</button><button class="btn dark" data-act="go">' + ic('upload') + 'Impor Anggota</button>', footRow: true,
     actions: {
@@ -144,7 +144,8 @@ function importAnggotaDialog() {
   });
   const upd = () => { $('#a-cnt', d.el).textContent = parseMembers($('#a-txt', d.el).value).length + ' baris terbaca'; };
   $('#a-txt', d.el).addEventListener('input', upd);
-  $('#a-file', d.el).addEventListener('change', async (e) => { const f = e.target.files[0]; if (f) { $('#a-txt', d.el).value = (await readTextFile(f)).replace(/\r/g, ''); upd(); } });
+  $('#a-file', d.el).addEventListener('change', async (e) => { const f = e.target.files[0]; if (!f) return; try { $('#a-txt', d.el).value = await readTableFile(f); upd(); toast($('#a-cnt', d.el).textContent + ' dari ' + f.name); } catch (err) { toast(err.message, 'error'); e.target.value = ''; } });
+  $('#a-tpl', d.el).addEventListener('click', (e) => { e.preventDefault(); downloadCSV('contoh-impor-anggota.csv', ['Nama', 'NIRA', 'NIP', 'Unit', 'No WA'], [['Ns. Dewi Sartika, S.Kep', '3516008721', '198804122012012003', 'ICU', '081234567890'], ['Bambang Utami, A.Md.Kep', '3516008722', '', 'IGD', '081234567891']]); });
 }
 function parseMembers(text) {
   text = String(text || '').trim();

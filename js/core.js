@@ -246,6 +246,73 @@ async function uploadBukti(file) {
   if (!res.success) throw new Error(res.message);
   return res.data.url;
 }
+/* ---- Baca berkas tabel: CSV/TXT apa adanya, XLSX diubah jadi teks berpemisah TAB ---- */
+async function inflateRaw_(u8) {
+  if (typeof DecompressionStream === 'undefined') throw new Error('Browser ini belum mendukung baca Excel. Gunakan Chrome/Edge terbaru atau simpan sebagai CSV.');
+  const ds = new DecompressionStream('deflate-raw');
+  const w = ds.writable.getWriter(); w.write(u8); w.close();
+  return new Uint8Array(await new Response(ds.readable).arrayBuffer());
+}
+async function unzipFiles_(buf) {
+  const dv = new DataView(buf), u8 = new Uint8Array(buf), dec = new TextDecoder();
+  let eocd = -1;
+  for (let i = u8.length - 22; i >= Math.max(0, u8.length - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  if (eocd < 0) throw new Error('Berkas bukan Excel (.xlsx) yang valid.');
+  const n = dv.getUint16(eocd + 10, true); let p = dv.getUint32(eocd + 16, true);
+  const out = {};
+  for (let k = 0; k < n; k++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) break;
+    const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true), nl = dv.getUint16(p + 28, true), el = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true), off = dv.getUint32(p + 42, true);
+    const name = dec.decode(u8.subarray(p + 46, p + 46 + nl));
+    p += 46 + nl + el + cl;
+    if (!/^xl\/(workbook\.xml|_rels\/workbook\.xml\.rels|sharedStrings\.xml|worksheets\/[^/]+\.xml)$/.test(name)) continue;
+    const ds = off + 30 + dv.getUint16(off + 26, true) + dv.getUint16(off + 28, true), raw = u8.subarray(ds, ds + csize);
+    out[name] = dec.decode(method === 0 ? raw : await inflateRaw_(raw));
+  }
+  return out;
+}
+async function xlsxToRows(file) {
+  const files = await unzipFiles_(await file.arrayBuffer());
+  const xml = (t) => new DOMParser().parseFromString(t, 'application/xml');
+  const strs = [];
+  if (files['xl/sharedStrings.xml']) xml(files['xl/sharedStrings.xml']).querySelectorAll('si').forEach((si) => {
+    let t = ''; si.querySelectorAll('t').forEach((x) => { if (!x.closest('rPh')) t += x.textContent; }); strs.push(t);
+  });
+  let sheetPath = 'xl/worksheets/sheet1.xml';
+  try {
+    const wb = xml(files['xl/workbook.xml']), rid = wb.querySelector('sheets > sheet').getAttribute('r:id');
+    const rel = Array.from(xml(files['xl/_rels/workbook.xml.rels']).querySelectorAll('Relationship')).find((r) => r.getAttribute('Id') === rid);
+    if (rel) sheetPath = 'xl/' + rel.getAttribute('Target').replace(/^\/?(xl\/)?/, '');
+  } catch (e) { /* pakai sheet1 */ }
+  if (!files[sheetPath]) sheetPath = Object.keys(files).find((k) => /worksheets\//.test(k));
+  if (!sheetPath) throw new Error('Lembar kerja tidak ditemukan di berkas Excel.');
+  const rows = [];
+  xml(files[sheetPath]).querySelectorAll('sheetData > row').forEach((r) => {
+    const cells = [];
+    r.querySelectorAll(':scope > c').forEach((c) => {
+      const ref = (c.getAttribute('r') || '').replace(/\d+/g, ''); let col = 0;
+      for (let i = 0; i < ref.length; i++) col = col * 26 + ref.charCodeAt(i) - 64;
+      col = Math.max(col - 1, cells.length);
+      const t = c.getAttribute('t'), v = c.querySelector(':scope > v'), is = c.querySelector(':scope > is');
+      let val = '';
+      if (t === 's' && v) val = strs[Number(v.textContent)] || '';
+      else if (t === 'inlineStr' && is) val = Array.from(is.querySelectorAll('t')).map((x) => x.textContent).join('');
+      else if (v) { val = v.textContent; if (!t || t === 'n') { const num = Number(val); if (isFinite(num) && Number.isInteger(num) && Math.abs(num) < 1e21) val = String(num); } }
+      while (cells.length < col) cells.push('');
+      cells[col] = String(val).trim();
+    });
+    rows.push(cells);
+  });
+  return rows.filter((r) => r.some((c) => c));
+}
+async function readTableFile(file) {
+  if (/\.xlsx?$/i.test(file.name) || /spreadsheetml|ms-excel/.test(file.type)) {
+    if (/\.xls$/i.test(file.name)) throw new Error('Format .xls lama belum didukung. Simpan ulang sebagai .xlsx atau CSV.');
+    const q = (c) => (/[\t\n"]/.test(c) ? '"' + c.replace(/"/g, '""') + '"' : c);
+    return (await xlsxToRows(file)).map((r) => r.map(q).join('\t')).join('\n');
+  }
+  return (await readTextFile(file)).replace(/\r/g, '');
+}
 function readTextFile(file) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsText(file); }); }
 
 function downloadCSV(filename, headers, rows) {

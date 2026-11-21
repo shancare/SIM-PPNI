@@ -141,17 +141,27 @@ function parseCSV(text) {
   return rows.filter((r) => r.some((c) => c.trim()));
 }
 function bankFileToLists(text) {
-  const ber = [], gag = [];
-  parseCSV(text).forEach((cells) => {
-    cells = cells.map((c) => c.trim());
+  const ber = [], gag = [], REASON = /(saldo|tidak|rekening|blokir|pasif|cukup|dormant|insufficient|rejected|limit|closed|ditutup|invalid)/i;
+  const all = parseCSV(text).map((r) => r.map((c) => c.trim()));
+  // Cari judul kolom: Nama / Alasan (bila ada) agar pemilihan kolom pasti
+  let nameCol = -1, reasonCols = [];
+  for (let i = 0; i < Math.min(all.length, 8) && nameCol < 0; i++) {
+    const j = all[i].findIndex((c) => /^(nama|name|nama nasabah|nasabah|nama anggota|atas nama|nama rekening)$/i.test(c));
+    if (j > -1) { nameCol = j; reasonCols = all[i].map((c, k) => (/^(alasan|keterangan|ket\.?|reason|remark|remarks|pesan|catatan|kode gagal)$/i.test(c) ? k : -1)).filter((k) => k > -1); }
+  }
+  all.forEach((cells) => {
     const joined = cells.join(' ');
     const isG = /(gagal|fail|tolak|reject|insufficient|saldo tidak|dormant|pasif|blokir)/i.test(joined);
     const isB = /(berhasil|sukses|success|\bok\b|lunas|terdebit)/i.test(joined);
     if (!isG && !isB) return;
-    const nameCell = cells.filter((c) => /[a-zA-Z]{3,}/.test(c) && !/^(gagal|berhasil|sukses|success|fail)/i.test(c)).sort((a, b) => b.length - a.length)[0];
-    if (!nameCell) return;
-    if (isG) { const alasan = cells.filter((c) => c !== nameCell && /[a-zA-Z]{4,}/.test(c) && !/^(gagal|fail)/i.test(c)).join(' ').slice(0, 80); gag.push(nameCell + (alasan ? ' | ' + alasan : '')); }
-    else ber.push(nameCell);
+    const isLabel = (c) => /^(gagal|berhasil|sukses|success|fail|ok)$/i.test(c);
+    let nameCell = nameCol > -1 ? cells[nameCol] : '';
+    if (!nameCell) nameCell = cells.filter((c) => /[a-zA-Z]{3,}/.test(c) && !isLabel(c) && !REASON.test(c)).sort((x, y) => y.length - x.length)[0] || cells.filter((c) => /[a-zA-Z]{3,}/.test(c) && !isLabel(c)).sort((x, y) => y.length - x.length)[0];
+    if (!nameCell || nameCell === 'Nama' || /^nama$/i.test(nameCell)) return;
+    if (isG) {
+      const alasan = (reasonCols.length ? reasonCols.map((k) => cells[k] || '') : cells.filter((c) => c !== nameCell && /[a-zA-Z]{4,}/.test(c) && !isLabel(c) && !/^(gagal|fail)/i.test(c))).filter(Boolean).join(' ').slice(0, 80);
+      gag.push(nameCell + (alasan ? ' | ' + alasan : ''));
+    } else ber.push(nameCell);
   });
   return { ber, gag };
 }
@@ -163,7 +173,7 @@ async function importDialog() {
     title: 'Impor Rekap Bank', sub: 'Tempel daftar nama dari laporan auto debit bank, atau unggah berkas CSV. Satu nama per baris.', wide: true,
     body: '<div class="grid g2" style="gap:12px"><div class="field"><label for="i-per">Periode iuran</label><input class="input" type="month" id="i-per" name="periode" value="' + per + '" max="' + periodeNow() + '"></div>' +
       '<div class="field"><label for="i-tgl">Tanggal debit</label><input class="input" type="date" id="i-tgl" name="tanggal" value="' + per + '-' + String(AppState.boot.settings.TGL_AUTODEBIT || 10).padStart(2, '0') + '"></div></div>' +
-      '<div class="field"><label for="i-file">Unggah berkas CSV/TXT dari bank (opsional)</label><input class="input" type="file" id="i-file" accept=".csv,.txt,text/csv,text/plain" style="padding-top:10px"><div class="hint">Baris yang mengandung kata "gagal/sukses" akan dipisah otomatis. Periksa hasilnya sebelum melanjutkan.</div></div>' +
+      '<div class="field"><label for="i-file">Unggah berkas Excel/CSV dari bank (opsional)</label><input class="input" type="file" id="i-file" accept=".xlsx,.csv,.txt,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="padding-top:10px"><div class="hint">Baris yang mengandung kata "gagal/sukses" akan dipisah otomatis. Periksa hasilnya sebelum melanjutkan.</div></div>' +
       '<div class="field"><label for="i-ber">Daftar BERHASIL</label><textarea class="input" id="i-ber" name="ber" rows="5" placeholder="Ns. Hendra Kurniawan, A.Md.Kep&#10;Siti Rahmawati"></textarea></div>' +
       '<div class="field"><label for="i-gag">Daftar GAGAL — format: Nama | alasan</label><textarea class="input" id="i-gag" name="gag" rows="5" placeholder="Dewi Sartika | Saldo tidak cukup&#10;Bambang Prakoso | Rekening pasif"></textarea></div>' +
       '<label class="check"><input type="checkbox" name="sisa" id="i-sisa"><span>Anggota aktif yang <b>tidak disebut</b> di kedua daftar dianggap <b>berhasil</b><br><span class="hint">Berguna jika bank hanya mengirim daftar yang gagal.</span></span></label>',
@@ -172,7 +182,8 @@ async function importDialog() {
   });
   $('#i-file', d.el).addEventListener('change', async (e) => {
     const f = e.target.files[0]; if (!f) return;
-    const { ber, gag } = bankFileToLists(await readTextFile(f));
+    let txt; try { txt = await readTableFile(f); } catch (err) { e.target.value = ''; return toast(err.message, 'error'); }
+    const { ber, gag } = bankFileToLists(txt);
     if (!ber.length && !gag.length) return toast('Tidak ada baris yang dikenali. Isi daftar secara manual.', 'error');
     $('#i-ber', d.el).value = ber.join('\n'); $('#i-gag', d.el).value = gag.join('\n'); toast(ber.length + ' berhasil, ' + gag.length + ' gagal terbaca.');
   });
