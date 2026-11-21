@@ -10,13 +10,17 @@ function loadBoot(boot) {
   Store.set(userKey('boot'), { t: Date.now(), data: boot });
 }
 
+/* ---------- Lockup logo: [RSUD][PPNI] + teks ---------- */
+function brandLogos() { return '<div class="logos"><img src="img/logo-rsud.png" alt="" width="40" height="40"><img src="img/logo-ppni.png" alt="Logo PPNI" width="40" height="40"></div>'; }
+function brandLockup() { return '<div class="lockup">' + brandLogos() + '<div class="lk-txt"><small>Dewan Pengurus Komisariat (DPK) PPNI</small><strong>RSUD SOEKANDAR</strong></div></div>'; }
+
 /* ---------- Login (username + sandi) ---------- */
 function showLogin(msg) {
   AppState.token = ''; AppState.user = null;
   appEl().innerHTML = '<div class="login"><form class="login-card" id="login-form" novalidate>' +
-    '<div class="brand-mark">' + LOGO_SVG_WHITE + '</div>' +
-    '<h1 class="h-md" style="font-size:22px">SIM-IURAN PPNI</h1>' +
-    '<p class="muted mt8">DPK PPNI RSUD Prof. Dr. Soekandar<br>Sistem Informasi Iuran Anggota</p>' +
+    '<div class="lockup lk-login">' + brandLogos() + '<div class="lk-txt"><small>Dewan Pengurus Komisariat (DPK) PPNI</small><strong>RSUD SOEKANDAR</strong></div></div>' +
+    '<h1 class="h-md" style="font-size:20px;margin-top:20px">SIM-IURAN PPNI</h1>' +
+    '<p class="muted mt8">Sistem Informasi Iuran Anggota</p>' +
     '<div class="field mt16" style="text-align:left"><label for="lg-user">Username</label><input class="input" id="lg-user" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required></div>' +
     '<div class="field" style="text-align:left"><label for="lg-pass">Sandi</label><div class="pw-wrap"><input class="input" id="lg-pass" name="password" type="password" autocomplete="current-password" required><button type="button" class="btn ghost icon pw-eye" id="lg-eye" aria-label="Tampilkan sandi">' + ic('eye', 'ic-sm') + '</button></div></div>' +
     '<button class="btn dark block" id="lg-btn" type="submit">Masuk</button>' +
@@ -59,11 +63,11 @@ function buildShell() {
   const bottom = NAV.slice(0, 5).map((n) => '<a href="#/' + n.name + '" data-nav="' + n.name + '">' + ic(n.icon) + '<span>' + n.short + '</span></a>').join('');
   appEl().innerHTML =
     '<div class="shell">' +
-    '<aside class="sidebar"><div class="brand"><div class="brand-mark">' + LOGO_SVG + '</div><div><b>SIM-IURAN PPNI</b><span>RSUD PROF. DR. SOEKANDAR</span></div></div>' +
+    '<aside class="sidebar"><div class="brand side-brand">' + brandLockup() + '</div>' +
     '<nav aria-label="Menu utama">' + side + '</nav>' +
     '<div class="side-foot"><b>' + ic('shield', 'ic-sm') + 'DPK Terakreditasi</b>Basis data anggota resmi komisariat RSUD Soekandar.</div></aside>' +
     '<div class="content"><header class="topbar">' +
-    '<div class="brand"><div class="brand-mark">' + LOGO_SVG + '</div><div><b id="org-name">' + esc(b.settings.NAMA_ORG) + '</b><span>SIM Pengelolaan Keuangan Iuran</span></div></div>' +
+    '<div class="brand">' + brandLockup().replace('class="lockup"', 'class="lockup lk-top"') + '<div class="top-title"><b id="org-name">' + esc(b.settings.NAMA_ORG) + '</b><span>SIM Pengelolaan Keuangan Iuran</span></div></div>' +
     '<span class="chip-year">' + ic('calendar', 'ic-sm') + 'Tahun Anggaran ' + b.tahun + '</span>' +
     '<label class="top-search">' + ic('search', 'ic-sm') + '<input id="gsearch" type="search" placeholder="Cari nama, NIRA, ruangan…" aria-label="Cari anggota"></label>' +
     '<div class="who"><b>' + esc(u.nama || u.email) + '</b><span>' + esc(u.peran) + '</span></div>' +
